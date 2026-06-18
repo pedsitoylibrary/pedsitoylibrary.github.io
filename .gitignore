@@ -1,0 +1,7 @@
+*.ps1
+*.sql
+estimate-ages.js
+server.js
+.netlify/
+node_modules/
+.claude/
