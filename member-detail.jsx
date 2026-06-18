@@ -18,9 +18,8 @@ function ItemDetail({ item, onClose }) {
 
   const meta = isToy
     ? [["รหัสของเล่น", item.code], ["ด้านพัฒนาการ", cat.th], ["ช่วงอายุ", age], ["จำนวนชิ้น/ชุด", item.pieces || "1 ชุด"]]
-    : [["ISBN", item.code], ["ผู้แต่ง", item.author], ["หมวดหมู่", cat.th], ["ภาษา", item.cat === "foreign" ? "อังกฤษ/สองภาษา" : "ไทย"],
-       ...(item.publishYear ? [["ปีที่พิมพ์", item.publishYear]] : []),
-       ...(item.edition ? [["ครั้งที่พิมพ์", item.edition]] : [])];
+    : [["ISBN", item.code], ["ผู้แต่ง", item.author || "–"], ["หมวดหมู่", cat.th], ["ภาษา", item.cat === "foreign" ? "อังกฤษ/สองภาษา" : "ไทย"],
+       ["ปีที่พิมพ์", item.publishYear || "–"], ["ครั้งที่พิมพ์", item.edition || "–"]];
 
   return (
     <div className="overlay" onClick={onClose} style={overlayStyle}>
