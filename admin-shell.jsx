@@ -574,6 +574,15 @@ function AdminMembers() {
     setEditing(null);
   };
 
+  const handleDelete = (m) => {
+    const active = Da.loans.filter((l) => l.member === m.id).length;
+    if (active > 0) { alert(`ไม่สามารถลบได้ — ${m.name} ยังมีของที่ยืมอยู่ ${active} รายการ`); return; }
+    if (!window.confirm(`ลบสมาชิก "${m.name}" ออกจากระบบ?\nการกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
+    const updated = members.filter((x) => x.id !== m.id);
+    persist(updated);
+    if (window.DB) window.DB.deleteMember(m.id).catch((e) => alert("ลบไม่สำเร็จ: " + (e.message || e)));
+  };
+
   const rows = members.filter((m) =>
     !q.trim() || (m.name + m.code + (m.phone || "") + (m.child || "")).toLowerCase().includes(q.trim().toLowerCase())
   );
@@ -621,7 +630,10 @@ function AdminMembers() {
                       : <span className="muted" style={{ fontSize: 13 }}>ไม่มี</span>}
                   </td>
                   <td style={{ padding: "13px 16px", textAlign: "right" }}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setEditing(m)}><Icon name="settings" size={14} /> แก้ไข</button>
+                    <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEditing(m)}><Icon name="settings" size={14} /> แก้ไข</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--over)" }} onClick={() => handleDelete(m)}><Icon name="x" size={14} /> ลบ</button>
+                    </div>
                   </td>
                 </tr>
               );

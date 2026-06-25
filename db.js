@@ -178,6 +178,11 @@
       if (error) console.error("[DB] updateMember:", error);
     },
 
+    async deleteMember(id) {
+      const { error } = await client.from("members").delete().eq("id", id);
+      if (error) { console.error("[DB] deleteMember:", error); throw new Error(error.message || JSON.stringify(error)); }
+    },
+
     /* ---- loans ---- */
     async addLoan(loan) {
       const { error } = await client.from("loans").insert(loanToRow(loan));
