@@ -20,6 +20,7 @@
       image: r.image || null,
       pieces: r.pieces || null,
       publishYear: r.publish_year || null,
+      barcode: r.barcode || null,
     };
     if (r.age_lo != null) item.ageLo = r.age_lo;
     if (r.age_hi != null) item.ageHi = r.age_hi;
@@ -35,6 +36,7 @@
       author: it.author || null, call_number: it.callNumber || null,
       cutter_number: it.cutterNumber || null, edition: it.edition || null,
       publish_year: it.publishYear || null,
+      barcode: it.barcode || null,
       status: it.status || "ok",
       loans: it.loans || 0, due_date: it.due || null,
       image: it.image || null,
@@ -152,6 +154,7 @@
       if (item.cutterNumber != null) payload.cutter_number = item.cutterNumber;
       if (item.edition    != null) payload.edition      = item.edition;
       if (item.publishYear != null) payload.publish_year = item.publishYear;
+      if (item.barcode    != null) payload.barcode      = item.barcode;
       console.log("[DB] editItem payload:", payload, "id:", item.id);
       const { error } = await client.from("items").update(payload).eq("id", item.id);
       if (error) { console.error("[DB] editItem error:", error); throw new Error(error.message || JSON.stringify(error)); }

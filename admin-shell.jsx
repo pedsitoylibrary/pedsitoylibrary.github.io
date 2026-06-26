@@ -332,7 +332,7 @@ function AdminManage({ openItem }) {
   };
 
   const rows = items.filter((it) => (filter === "all" || it.kind === filter) &&
-    (!q.trim() || (it.th + it.en + it.code + (it.author || "")).toLowerCase().includes(q.trim().toLowerCase())));
+    (!q.trim() || (it.th + it.en + it.code + (it.author || "") + (it.barcode || "")).toLowerCase().includes(q.trim().toLowerCase())));
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((pg - 1) * PAGE_SIZE, pg * PAGE_SIZE);
@@ -444,6 +444,7 @@ function EditModal({ item, onSave, onClose }) {
     publishYear: item?.publishYear || "",
     callNumber: item?.callNumber || "",
     cutterNumber: item?.cutterNumber || "",
+    barcode: item?.barcode || "",
     status: item?.status || "ok",
     image: item?.image || "",
   });
@@ -523,6 +524,7 @@ function EditModal({ item, onSave, onClose }) {
               <div style={{ flex: 1 }}><span className="label">เลขหมู่</span><input className="field" value={form.callNumber} onChange={set("callNumber")} placeholder="เช่น 895.913" /></div>
               <div style={{ flex: 1 }}><span className="label">เลขผู้แต่ง</span><input className="field" value={form.cutterNumber} onChange={set("cutterNumber")} placeholder="เช่น ส732ห" /></div>
             </div>}
+            {form.kind === "book" && <div><span className="label">Barcode ห้องสมุด</span><input className="field" value={form.barcode} onChange={set("barcode")} placeholder="สแกนหรือพิมพ์ barcode" /></div>}
             <div><span className="label">สถานะ</span>
               <select className="field" value={form.status} onChange={set("status")}>
                 {Object.entries(STATUS_MAP).filter(([k]) => k !== "reserved").map(([k, v]) => <option key={k} value={k}>{v.th}</option>)}
