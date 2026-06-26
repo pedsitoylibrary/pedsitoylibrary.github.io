@@ -435,7 +435,7 @@ function EditModal({ item, onSave, onClose }) {
     th: item?.th || "",
     en: item?.en || "",
     code: item?.code || "",
-    cat: item?.cat || "",
+    cat: item?.cat || ((item?.kind === "book") ? Da.BOOK_CATS[0].id : Da.TOY_CATS[0].id),
     ageLo: item?.ageLo ?? 12,
     ageHi: item?.ageHi ?? 48,
     pieces: item?.pieces || "",
@@ -452,7 +452,7 @@ function EditModal({ item, onSave, onClose }) {
   const fileRef = React.useRef();
 
   const set = (k) => (e) => { setForm(p => ({ ...p, [k]: e.target.value })); setErr(""); };
-  const setKind = (v) => setForm(p => ({ ...p, kind: v, cat: "" }));
+  const setKind = (v) => setForm(p => ({ ...p, kind: v, cat: v === "book" ? Da.BOOK_CATS[0].id : Da.TOY_CATS[0].id }));
 
   const onFile = (e) => {
     const file = e.target.files?.[0];
