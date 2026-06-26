@@ -125,8 +125,14 @@ function AdminOps() {
     <div className="rise" style={{ padding: "26px 32px 50px", maxWidth: 1100, margin: "0 auto" }}>
       <AdminHead title="ยืม–คืนทรัพยากร" sub="บันทึกการยืมและรับคืน พร้อมตรวจสอบกฎและกำหนดส่ง">
         <div className="seg" style={{ background: "var(--surface)", border: "1px solid var(--line-2)" }}>
-          <button className={mode === "out" ? "active" : ""} onClick={() => setMode("out")} style={{ padding: "9px 22px" }}>บันทึกยืม</button>
-          <button className={mode === "in" ? "active" : ""} onClick={() => setMode("in")} style={{ padding: "9px 22px" }}>รับคืน</button>
+          <button className={mode === "out" ? "active" : ""} onClick={() => setMode("out")}
+            style={{ padding: "9px 22px", ...(mode === "out" ? { background: "var(--brand)", color: "#fff", boxShadow: "0 2px 8px color-mix(in srgb, var(--brand) 30%, transparent)" } : {}) }}>
+            บันทึกยืม
+          </button>
+          <button className={mode === "in" ? "active" : ""} onClick={() => setMode("in")}
+            style={{ padding: "9px 22px", ...(mode === "in" ? { background: "var(--accent)", color: "#fff", boxShadow: "0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent)" } : {}) }}>
+            รับคืน
+          </button>
         </div>
       </AdminHead>
 
