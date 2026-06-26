@@ -25,7 +25,24 @@
     if (r.age_lo != null) item.ageLo = r.age_lo;
     if (r.age_hi != null) item.ageHi = r.age_hi;
     if (r.due_date) item.due = r.due_date;
+    item.copies = [];
     return item;
+  }
+
+  /* ---- copies (ฉบับ/เล่มจริง) ---- */
+  function rowToCopy(r) {
+    return {
+      id: r.id, itemId: r.item_id, barcode: r.barcode || "",
+      label: r.label || "", status: r.status || "ok",
+      due: r.due_date || null, note: r.note || "", loans: r.loans || 0,
+    };
+  }
+  function copyToRow(c) {
+    return {
+      id: c.id, item_id: c.itemId, barcode: c.barcode || null,
+      label: c.label || null, status: c.status || "ok",
+      due_date: c.due || null, note: c.note || null, loans: c.loans || 0,
+    };
   }
   function itemToRow(it) {
     return {
@@ -61,14 +78,14 @@
 
   function rowToLoan(r) {
     return {
-      id: r.id, member: r.member_id, itemId: r.item_id,
+      id: r.id, member: r.member_id, itemId: r.item_id, copyId: r.copy_id || null,
       borrowed: r.borrowed_at, due: r.due_at, status: r.status,
       bag: r.bag || null,
     };
   }
   function loanToRow(l) {
     return {
-      id: l.id, member_id: l.member, item_id: l.itemId,
+      id: l.id, member_id: l.member, item_id: l.itemId, copy_id: l.copyId || null,
       borrowed_at: l.borrowed, due_at: l.due,
       returned_at: null, status: l.status || "active",
       bag: l.bag || null,
@@ -81,8 +98,9 @@
     async loadAll() {
       const Da = window.DATA;
       try {
-        const [itemsRes, membersRes, loansRes, statsRes] = await Promise.all([
+        const [itemsRes, copiesRes, membersRes, loansRes, statsRes] = await Promise.all([
           client.from("items").select("*").order("kind").order("th"),
+          client.from("copies").select("*"),
           client.from("members").select("*").order("code"),
           client.from("loans").select("*").is("returned_at", null),
           client.from("monthly_stats").select("*").order("year").order("id"),
@@ -90,6 +108,14 @@
 
         if (itemsRes.data && itemsRes.data.length > 0) {
           const mapped = itemsRes.data.map(rowToItem);
+          // attach copies grouped by item_id
+          const byItem = {};
+          (copiesRes.data || []).forEach(r => { const c = rowToCopy(r); (byItem[c.itemId] = byItem[c.itemId] || []).push(c); });
+          mapped.forEach(it => {
+            it.copies = (byItem[it.id] || []).sort((a, b) => (a.label || "").localeCompare(b.label || "", "th"));
+            Da.ensureCopies(it);
+            Da.recompute(it);
+          });
           Da.items.length = 0; mapped.forEach(i => Da.items.push(i));
           Da.toys.length = 0; mapped.filter(i => i.kind === "toy").forEach(i => Da.toys.push(i));
           Da.books.length = 0; mapped.filter(i => i.kind === "book").forEach(i => Da.books.push(i));
@@ -168,6 +194,38 @@
     async deleteItem(id) {
       const { error } = await client.from("items").delete().eq("id", id);
       if (error) console.error("[DB] deleteItem:", error);
+    },
+
+    /* ---- copies (ฉบับ/เล่มจริง) ---- */
+    // upsert เล่มที่ส่งมา + ลบเล่มที่ถูกเอาออก (ใช้ตอนบันทึกจากฟอร์มแก้ไข)
+    async syncItemCopies(copies, removedIds) {
+      if (copies && copies.length) {
+        const { error } = await client.from("copies").upsert(copies.map(copyToRow));
+        if (error) { console.error("[DB] syncItemCopies upsert:", error); throw new Error(error.message || JSON.stringify(error)); }
+      }
+      if (removedIds && removedIds.length) {
+        const { error } = await client.from("copies").delete().in("id", removedIds);
+        if (error) { console.error("[DB] syncItemCopies delete:", error); throw new Error(error.message || JSON.stringify(error)); }
+      }
+    },
+
+    // อัปเดตสถานะ/กำหนดคืน/ยอดยืม ของเล่นเดียว (ใช้ตอนยืม-คืน)
+    async updateCopy(id, patch) {
+      const col = {};
+      if (patch.status !== undefined) col.status   = patch.status;
+      if (patch.due    !== undefined) col.due_date = patch.due || null;
+      if (patch.loans  !== undefined) col.loans    = patch.loans;
+      const { error } = await client.from("copies").update(col).eq("id", id);
+      if (error) console.error("[DB] updateCopy:", error);
+    },
+
+    // bulk upsert เล่มทั้งหมด (ใช้ตอนนำเข้า Excel)
+    async saveCopies(copies) {
+      const rows = copies.map(copyToRow);
+      for (let i = 0; i < rows.length; i += 100) {
+        const { error } = await client.from("copies").upsert(rows.slice(i, i + 100));
+        if (error) console.error("[DB] saveCopies:", error);
+      }
     },
 
     /* ---- members ---- */

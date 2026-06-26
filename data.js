@@ -67,6 +67,19 @@
     B("b12","978-616-7-031","First English Words","First English Words","Oxford Kids","foreign"),
   ];
 
+  // ---- physical copies (ฉบับ/เล่มจริง) — MARC21-style holdings ----
+  // 1 ชื่อเรื่อง (bibliographic) มีได้หลายเล่มจริง (item/holding) — แยก barcode + สถานะรายเล่ม
+  const COPY_COUNTS = { b01: 3, b03: 2, t01: 2 };  // demo: หนังสือ/ของเล่นที่มีหลายเล่ม
+  [...toys, ...books].forEach((it) => {
+    const n = COPY_COUNTS[it.id] || 1;
+    const word = it.kind === "toy" ? "ชิ้น" : "เล่ม";
+    it.copies = Array.from({ length: n }, (_, i) => ({
+      id: `${it.id}-c${i + 1}`, itemId: it.id,
+      barcode: "", label: `${word}ที่ ${i + 1}`,
+      status: it.status || "ok", due: it.due || null, note: "", loans: 0,
+    }));
+  });
+
   // ---- members ----
   const members = [
     { id: "m01", code: "MEM-0231", name: "คุณนภัสสร ใจดี",   child: "น้องปริม", childAgeMo: 30, phone: "08x-xxx-1234", active: 0, history: 0 },
@@ -119,6 +132,58 @@
     const f = (mo) => (mo % 12 === 0 ? `${mo / 12} ปี` : `${mo} ด.`);
     return `${f(item.ageLo)} – ${f(item.ageHi)}`;
   };
+
+  /* ---- copies (ฉบับ/เล่มจริง) helpers ---- */
+  // ทำให้ทุก item มี copies เสมอ (สำหรับข้อมูลเก่าที่ยังไม่มีเล่ม)
+  window.DATA.ensureCopies = (it) => {
+    if (!Array.isArray(it.copies) || it.copies.length === 0) {
+      const word = it.kind === "toy" ? "ชิ้น" : "เล่ม";
+      it.copies = [{
+        id: it.id + "-c1", itemId: it.id,
+        barcode: it.barcode || "", label: `${word}ที่ 1`,
+        status: it.status || "ok", due: it.due || null, note: "",
+        loans: it.loans || 0,
+      }];
+    } else {
+      it.copies.forEach((c) => { if (!c.itemId) c.itemId = it.id; });
+    }
+    return it;
+  };
+  // สรุปสถานะรวมจาก copies → เขียนกลับลง it.status / it.due / it.loans ให้โค้ดเดิมอ่านได้
+  window.DATA.recompute = (it) => {
+    const cs = it.copies || [];
+    const avail = cs.filter((c) => c.status === "ok").length;
+    it._total = cs.length;
+    it._avail = avail;
+    if (avail > 0) it.status = "ok";
+    else if (cs.some((c) => c.status === "busy")) it.status = "busy";
+    else if (cs.some((c) => c.status === "inlib")) it.status = "inlib";
+    else if (cs.some((c) => c.status === "fix")) it.status = "fix";
+    else it.status = "busy";
+    const dues = cs.filter((c) => c.status === "busy" && c.due).map((c) => c.due).sort();
+    it.due = dues[0] || null;
+    it.loans = cs.reduce((s, c) => s + (c.loans || 0), 0);
+    return it;
+  };
+  window.DATA.availInfo = (it) => ({
+    total: it._total != null ? it._total : (it.copies || []).length,
+    avail: it._avail != null ? it._avail : (it.copies || []).filter((c) => c.status === "ok").length,
+  });
+  // หา copy + item แม่ จาก copyId (รองรับ loan เก่าที่ไม่มี copyId → คืนเล่มที่กำลังถูกยืมของ item)
+  window.DATA.copyById = (cid, fallbackItemId) => {
+    for (const it of window.DATA.items) {
+      const c = (it.copies || []).find((x) => x.id === cid);
+      if (c) return { copy: c, item: it };
+    }
+    if (fallbackItemId) {
+      const it = window.DATA.itemById(fallbackItemId);
+      if (it) { const c = (it.copies || []).find((x) => x.status === "busy") || (it.copies || [])[0]; if (c) return { copy: c, item: it }; }
+    }
+    return null;
+  };
+
+  // normalize: ให้ทุก item มี copies + สถานะรวมที่ถูกต้องตั้งแต่เริ่ม
+  window.DATA.items.forEach((it) => { window.DATA.ensureCopies(it); window.DATA.recompute(it); });
 
   // One-time reset: clear any previously stored demo data from localStorage
   if (!localStorage.getItem("stl_fresh_v1")) {

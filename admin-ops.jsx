@@ -52,17 +52,21 @@ function AdminOps() {
   const reset = () => { setMember(null); setCart([]); setDone(false); setBag(""); setDoneBags([]); };
   React.useEffect(reset, [mode]);
 
+  // cart (ยืม) = [{ copy, item }] · cart (คืน) = [loan]
   const confirmBorrow = () => {
     const due = of.addDays(Do.today, Do.rules.days);
     const bagCode = bag.trim() || null;
     const newLoans = [];
-    cart.forEach(it => {
-      const loan = { id: "L" + Date.now() + Math.random().toString(36).slice(2), member: member.id, itemId: it.id, borrowed: Do.today, due, status: "active", bag: bagCode };
+    const touched = new Set();
+    cart.forEach(({ copy, item }) => {
+      const loan = { id: "L" + Date.now() + Math.random().toString(36).slice(2), member: member.id, itemId: item.id, copyId: copy.id, borrowed: Do.today, due, status: "active", bag: bagCode };
       Do.loans.push(loan);
       newLoans.push(loan);
-      it.status = "busy";
-      it.due = due;
-      it.loans = (it.loans || 0) + 1;
+      copy.status = "busy";
+      copy.due = due;
+      copy.loans = (copy.loans || 0) + 1;
+      Do.recompute(item);
+      touched.add(item);
     });
     setDoneBags(bagCode ? [bagCode] : []);
     const m = Do.members.find(x => x.id === member.id);
@@ -73,11 +77,12 @@ function AdminOps() {
     if (ms) ms.borrow = (ms.borrow || 0) + 1;
     else Do.monthly.push({ m: label, borrow: 1, ret: 0 });
     const nowT = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-    cart.forEach(it => Do.activity.unshift({ type: "borrow", item: it.th, who: member.name, t: nowT }));
+    cart.forEach(({ item }) => Do.activity.unshift({ type: "borrow", item: item.th, who: member.name, t: nowT }));
     if (window.DB) {
       Promise.all([
         ...newLoans.map(l => window.DB.addLoan(l)),
-        ...cart.map(it => window.DB.updateItem(it.id, { status: "busy", due: it.due, loans: it.loans })),
+        ...cart.map(({ copy }) => window.DB.updateCopy(copy.id, { status: "busy", due: copy.due, loans: copy.loans })),
+        ...[...touched].map(item => window.DB.updateItem(item.id, { loans: item.loans })),
         m ? window.DB.updateMember(m.id, { active: m.active, history: m.history }) : Promise.resolve(),
         window.DB.incrementStat(label, year, true),
       ]).catch(console.error);
@@ -87,11 +92,11 @@ function AdminOps() {
 
   const confirmReturn = () => {
     const returned = [];
-    cart.forEach(it => {
-      const li = Do.loans.findIndex(l => l.member === member.id && l.itemId === it.id);
+    cart.forEach(loan => {
+      const li = Do.loans.findIndex(l => l.id === loan.id);
       if (li >= 0) { returned.push(Do.loans[li]); Do.loans.splice(li, 1); }
-      it.status = "ok";
-      delete it.due;
+      const ci = Do.copyById(loan.copyId, loan.itemId);
+      if (ci) { ci.copy.status = "ok"; ci.copy.due = null; Do.recompute(ci.item); if (!loan.copyId) loan.copyId = ci.copy.id; }
     });
     setDoneBags([...new Set(returned.map(l => l.bag).filter(Boolean))]);
     const m = Do.members.find(x => x.id === member.id);
@@ -102,11 +107,11 @@ function AdminOps() {
     if (ms2) ms2.ret = (ms2.ret || 0) + 1;
     else Do.monthly.push({ m: label, borrow: 0, ret: 1 });
     const nowT2 = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-    cart.forEach(it => Do.activity.unshift({ type: "return", item: it.th, who: member.name, t: nowT2 }));
+    returned.forEach(l => { const it = Do.itemById(l.itemId); Do.activity.unshift({ type: "return", item: it ? it.th : "", who: member.name, t: nowT2 }); });
     if (window.DB) {
       Promise.all([
         ...returned.map(l => window.DB.returnLoan(l.id, Do.today)),
-        ...cart.map(it => window.DB.updateItem(it.id, { status: "ok", due: null })),
+        ...returned.map(l => l.copyId ? window.DB.updateCopy(l.copyId, { status: "ok", due: null }) : Promise.resolve()),
         m ? window.DB.updateMember(m.id, { active: m.active }) : Promise.resolve(),
         window.DB.incrementStat(label, year, false),
       ]).catch(console.error);
@@ -209,12 +214,12 @@ function AdminOps() {
                 </div>
                 <div className="stack" style={{ flex: 1, padding: cart.length ? 16 : 0, gap: 10 }}>
                   {cart.length === 0 ? <Empty icon="box" title="ยังไม่มีรายการในตะกร้า" sub="กด “สแกน/เพิ่มรายการ” เพื่อเพิ่มของเล่นหรือหนังสือที่สมาชิกต้องการยืม" /> :
-                    cart.map((it) => (
-                      <div key={it.id} className="row" style={{ gap: 13, padding: 11, border: "1px solid var(--line)", borderRadius: 12 }}>
+                    cart.map(({ copy, item: it }) => (
+                      <div key={copy.id} className="row" style={{ gap: 13, padding: 11, border: "1px solid var(--line)", borderRadius: 12 }}>
                         <div style={{ width: 46, flex: "none" }}><ItemImage item={it} ratio="1 / 1" radius="9px" /></div>
-                        <div className="stack" style={{ flex: 1, gap: 3 }}><span style={{ fontWeight: 500, fontSize: 14.5 }}>{it.th}</span><span className="muted" style={{ fontSize: 12, fontFamily: "'IBM Plex Mono',monospace" }}>{it.code}</span></div>
+                        <div className="stack" style={{ flex: 1, gap: 3 }}><span style={{ fontWeight: 500, fontSize: 14.5 }}>{it.th}</span><span className="muted" style={{ fontSize: 12, fontFamily: "'IBM Plex Mono',monospace" }}>{copy.barcode || copy.label} · {it.code}</span></div>
                         <span className="tag" style={{ fontSize: 11.5 }}>{it.kind === "toy" ? "ของเล่น" : "หนังสือ"}</span>
-                        <button onClick={() => setCart(cart.filter((x) => x.id !== it.id))} style={iconBtnStyle}><Icon name="x" size={15} /></button>
+                        <button onClick={() => setCart(cart.filter((e) => e.copy.id !== copy.id))} style={iconBtnStyle}><Icon name="x" size={15} /></button>
                       </div>
                     ))}
                 </div>
@@ -239,18 +244,20 @@ function AdminOps() {
                 <div className="stack" style={{ flex: 1, padding: memberLoans.length ? 16 : 0, gap: 10 }}>
                   {memberLoans.length === 0 ? <Empty icon="check" title="สมาชิกนี้ไม่มีรายการค้างคืน" /> :
                     memberLoans.map((l) => {
-                      const it = Do.itemById(l.itemId); const left = of.daysBetween(Do.today, l.due); const over = left < 0;
-                      const sel = cart.includes(it);
+                      const it = Do.itemById(l.itemId); const ci = Do.copyById(l.copyId, l.itemId); const copy = ci ? ci.copy : null;
+                      const left = of.daysBetween(Do.today, l.due); const over = left < 0;
+                      const sel = cart.some((x) => x.id === l.id);
                       return (
-                        <button key={l.id} onClick={() => setCart(sel ? cart.filter((x) => x !== it) : [...cart, it])} style={{
+                        <button key={l.id} onClick={() => setCart(sel ? cart.filter((x) => x.id !== l.id) : [...cart, l])} style={{
                           display: "flex", alignItems: "center", gap: 13, padding: 11, borderRadius: 12, cursor: "pointer", textAlign: "left",
                           border: sel ? "2px solid var(--brand)" : "1px solid var(--line)", background: sel ? "var(--brand-soft)" : "var(--surface)",
                         }}>
                           <span style={{ width: 22, height: 22, borderRadius: 7, flex: "none", border: sel ? "none" : "1.5px solid var(--line-2)", background: sel ? "var(--brand)" : "transparent", color: "#fff", display: "grid", placeItems: "center" }}>{sel && <Icon name="check" size={14} />}</span>
                           <div style={{ width: 46, flex: "none" }}><ItemImage item={it} ratio="1 / 1" radius="9px" /></div>
                           <div className="stack" style={{ flex: 1, gap: 3 }}>
-                            <span style={{ fontWeight: 500, fontSize: 14.5 }}>{it.th}</span>
+                            <span style={{ fontWeight: 500, fontSize: 14.5 }}>{it ? it.th : "(ไม่พบรายการ)"}</span>
                             <span className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                              {copy && <span className="muted" style={{ fontSize: 12, fontFamily: "'IBM Plex Mono',monospace" }}>{copy.barcode || copy.label}</span>}
                               <span className="muted" style={{ fontSize: 12 }}>กำหนดคืน {of.fmtDate(l.due)}</span>
                               {l.bag && <span className="tag" style={{ fontSize: 11 }}><Icon name="box" size={12} /> ถุงผ้า {l.bag}</span>}
                             </span>
@@ -272,31 +279,37 @@ function AdminOps() {
         </div>
       )}
 
-      {picker && <ItemPicker onPick={(it) => { if (!cart.includes(it)) setCart([...cart, it]); setPicker(false); }} onClose={() => setPicker(false)} />}
+      {picker && <ItemPicker onPick={(entry) => { if (!cart.some((e) => e.copy.id === entry.copy.id)) setCart([...cart, entry]); setPicker(false); }} onClose={() => setPicker(false)} />}
     </div>
   );
 }
 
 function ItemPicker({ onPick, onClose }) {
   const [q, setQ] = React.useState("");
-  const rows = Do.items.filter((it) => it.status === "ok" && (!q.trim() || (it.th + it.code).toLowerCase().includes(q.trim().toLowerCase()))).slice(0, 30);
+  // แสดงเป็นรายเล่มที่ว่าง — สแกน barcode ของเล่มนั้นได้โดยตรง
+  const all = [];
+  Do.items.forEach((it) => (it.copies || []).forEach((c) => { if (c.status === "ok") all.push({ copy: c, item: it }); }));
+  const term = q.trim().toLowerCase();
+  const rows = all.filter(({ copy, item }) => !term || (item.th + item.code + (copy.barcode || "") + (copy.label || "")).toLowerCase().includes(term)).slice(0, 40);
+  const pickFirst = () => { if (rows.length) onPick(rows[0]); };
   return ReactDOM.createPortal(
     <div className="overlay" onClick={onClose} style={overlayStyle}>
       <div className="card rise" onClick={(e) => e.stopPropagation()} style={{ width: "min(560px,94vw)", maxHeight: "82vh", display: "flex", flexDirection: "column", borderRadius: 20, overflow: "hidden", boxShadow: "var(--shadow-lg)" }}>
         <div className="row" style={{ gap: 10, padding: "14px 18px", borderBottom: "1px solid var(--line)" }}>
           <Icon name="search" size={19} style={{ color: "var(--muted)" }} />
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="สแกนหรือค้นหารายการที่ว่าง…" style={{ flex: 1, border: "none", outline: "none", fontSize: 15, background: "transparent" }} />
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") pickFirst(); }} placeholder="สแกน barcode หรือค้นหาเล่มที่ว่าง…" style={{ flex: 1, border: "none", outline: "none", fontSize: 15, background: "transparent" }} />
           <button onClick={onClose} style={iconBtnStyle}><Icon name="x" size={17} /></button>
         </div>
         <div className="stack" style={{ overflow: "auto", padding: 10, gap: 6 }}>
-          {rows.map((it) => (
-            <button key={it.id} onClick={() => onPick(it)} className="memrow" style={{ display: "flex", alignItems: "center", gap: 12, padding: 9, borderRadius: 11, border: "1px solid var(--line)", background: "var(--surface)", textAlign: "left", cursor: "pointer" }}>
-              <div style={{ width: 42, flex: "none" }}><ItemImage item={it} ratio="1 / 1" radius="9px" /></div>
-              <div className="stack" style={{ flex: 1 }}><span style={{ fontWeight: 500, fontSize: 14 }}>{it.th}</span><span className="muted" style={{ fontSize: 12, fontFamily: "'IBM Plex Mono',monospace" }}>{it.code}</span></div>
-              <span className="tag" style={{ fontSize: 11 }}>{it.kind === "toy" ? "ของเล่น" : "หนังสือ"}</span>
-              <Icon name="plus" size={17} style={{ color: "var(--brand)" }} />
-            </button>
-          ))}
+          {rows.length === 0 ? <Empty icon="search" title="ไม่พบเล่มที่ว่าง" sub="ลองเปลี่ยนคำค้นหา หรือ barcode" /> :
+            rows.map(({ copy, item: it }) => (
+              <button key={copy.id} onClick={() => onPick({ copy, item: it })} className="memrow" style={{ display: "flex", alignItems: "center", gap: 12, padding: 9, borderRadius: 11, border: "1px solid var(--line)", background: "var(--surface)", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ width: 42, flex: "none" }}><ItemImage item={it} ratio="1 / 1" radius="9px" /></div>
+                <div className="stack" style={{ flex: 1 }}><span style={{ fontWeight: 500, fontSize: 14 }}>{it.th}</span><span className="muted" style={{ fontSize: 12, fontFamily: "'IBM Plex Mono',monospace" }}>{copy.barcode || copy.label} · {it.code}</span></div>
+                <span className="tag" style={{ fontSize: 11 }}>{it.kind === "toy" ? "ของเล่น" : "หนังสือ"}</span>
+                <Icon name="plus" size={17} style={{ color: "var(--brand)" }} />
+              </button>
+            ))}
         </div>
       </div>
     </div>

@@ -75,9 +75,11 @@ const STATUS_MAP = {
   fix:      { cls: "idle", th: "ซ่อมบำรุง",         en: "Maintenance" },
   inlib:    { cls: "idle", th: "เฉพาะในห้องสมุด",   en: "Library Use Only" },
 };
-function StatusPill({ status, en = false }) {
+function StatusPill({ status, en = false, count }) {
   const s = STATUS_MAP[status] || STATUS_MAP.ok;
-  return <span className={`pill ${s.cls}`}><span className="dot"></span>{s.th}{en && <span style={{ opacity: .65, fontWeight: 400 }}>· {s.en}</span>}</span>;
+  // count = { total, avail } — แสดงจำนวนเล่มว่างเมื่อมีหลายเล่ม
+  const label = (count && count.total > 1 && status === "ok") ? `ว่าง ${count.avail}/${count.total} เล่ม` : s.th;
+  return <span className={`pill ${s.cls}`}><span className="dot"></span>{label}{en && <span style={{ opacity: .65, fontWeight: 400 }}>· {s.en}</span>}</span>;
 }
 
 /* ---------- Item image placeholder ---------- */
@@ -117,6 +119,7 @@ function ItemImage({ item, ratio = "4 / 3", radius = "var(--radius)", big = fals
 function ItemCard({ item, onOpen }) {
   const cat = window.DATA.catLabel(item);
   const age = window.DATA.ageText(item);
+  const info = window.DATA.availInfo(item);
   const avail = item.status === "ok";
   const inlib = item.status === "inlib";
   return (
@@ -128,7 +131,7 @@ function ItemCard({ item, onOpen }) {
       <div style={{ padding: 12, paddingBottom: 0, position: "relative" }}>
         <ItemImage item={item} ratio="5 / 4" radius="12px" />
         <div style={{ position: "absolute", top: 20, left: 20 }}>
-          <StatusPill status={item.status} />
+          <StatusPill status={item.status} count={info} />
         </div>
       </div>
       <div className="stack" style={{ padding: "13px 15px 15px", gap: 8, flex: 1 }}>
@@ -142,7 +145,7 @@ function ItemCard({ item, onOpen }) {
         <span className="en" style={{ marginTop: -3 }}>{item.en}{item.author ? ` · ${item.author}` : ""}</span>
         <div className="row" style={{ justifyContent: "flex-end", marginTop: "auto", paddingTop: 6 }}>
           <span className="row" style={{ gap: 3, color: avail ? "var(--brand)" : "var(--muted)", fontSize: 13, fontWeight: 500 }}>
-            {avail ? "ยืมได้" : inlib ? "ใช้ในห้องสมุด" : "ไม่ว่าง"} <Icon name="chevR" size={15} />
+            {avail ? (info.total > 1 ? `ยืมได้ · ${info.avail}/${info.total} เล่ม` : "ยืมได้") : inlib ? "ใช้ในห้องสมุด" : "ไม่ว่าง"} <Icon name="chevR" size={15} />
           </span>
         </div>
       </div>

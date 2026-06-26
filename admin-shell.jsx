@@ -276,16 +276,21 @@ function AdminManage({ openItem }) {
 
   const handleSave = (data) => {
     const isNew = !data.id;
-    const saved = isNew ? { ...data, id: "it" + Date.now(), loans: 0 } : { ...data };
+    const { _removedCopyIds = [], ...clean } = data;
+    const saved = isNew ? { ...clean, id: "it" + Date.now() } : { ...items.find(it => it.id === data.id), ...clean };
+    saved.copies = (saved.copies || []).map(c => ({ ...c, itemId: saved.id }));
+    Da.ensureCopies(saved);
+    Da.recompute(saved);
     const updated = isNew
       ? [...items, saved]
-      : items.map(it => it.id === data.id ? { ...it, ...data } : it);
+      : items.map(it => it.id === saved.id ? saved : it);
     setItems(updated);
     Da.items.length = 0; updated.forEach(i => Da.items.push(i));
     Da.toys.length  = 0; updated.filter(i => i.kind === "toy").forEach(i => Da.toys.push(i));
     Da.books.length = 0; updated.filter(i => i.kind === "book").forEach(i => Da.books.push(i));
     if (window.DB) {
       (isNew ? window.DB.insertItem(saved) : window.DB.editItem(saved))
+        .then(() => window.DB.syncItemCopies(saved.copies, _removedCopyIds))
         .catch(e => { console.error(e); alert("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง\n" + (e.message || e)); });
     } else {
       localStorage.setItem(ITEMS_LS_KEY, JSON.stringify(updated));
@@ -294,7 +299,19 @@ function AdminManage({ openItem }) {
   };
 
   const handleImport = (newItems) => {
-    saveItems([...items, ...newItems]);
+    newItems.forEach(it => { Da.ensureCopies(it); Da.recompute(it); });
+    const updated = [...items, ...newItems];
+    setItems(updated);
+    Da.items.length = 0; updated.forEach(i => Da.items.push(i));
+    Da.toys.length  = 0; updated.filter(i => i.kind === "toy").forEach(i => Da.toys.push(i));
+    Da.books.length = 0; updated.filter(i => i.kind === "book").forEach(i => Da.books.push(i));
+    if (window.DB) {
+      window.DB.saveItems(updated).catch(console.error);
+      const newCopies = newItems.flatMap(it => it.copies || []);
+      if (newCopies.length) window.DB.saveCopies(newCopies).catch(console.error);
+    } else {
+      localStorage.setItem(ITEMS_LS_KEY, JSON.stringify(updated));
+    }
   };
 
   const handleDelete = (id) => {
@@ -310,18 +327,23 @@ function AdminManage({ openItem }) {
   const exportExcel = async () => {
     try {
       const XLSX = await loadSheetJS();
-      const headers = ["ประเภท", "ชื่อไทย", "ชื่ออังกฤษ", "รหัส", "หมวดหมู่", "ผู้แต่ง", "อายุต่ำสุด", "อายุสูงสุด", "ครั้งที่พิมพ์", "เลขหมู่", "เลขผู้แต่ง", "สถานะ", "ยืมแล้ว"];
-      const rowData = items.map(it => [
-        it.kind === "book" ? "book" : "toy",
-        it.th || "", it.en || "", it.code || "", it.cat || "", it.author || "",
-        it.ageLo != null ? it.ageLo : "", it.ageHi != null ? it.ageHi : "",
-        it.edition || "", it.callNumber || "", it.cutterNumber || "",
-        it.status || "ok", it.loans || 0,
-      ]);
+      const headers = ["ประเภท", "ชื่อไทย", "ชื่ออังกฤษ", "รหัส", "หมวดหมู่", "ผู้แต่ง", "อายุต่ำสุด", "อายุสูงสุด", "ครั้งที่พิมพ์", "เลขหมู่", "เลขผู้แต่ง", "สถานะ", "ยืมแล้ว", "จำนวนเล่ม", "ว่าง", "barcode"];
+      const rowData = items.map(it => {
+        const info = Da.availInfo(it);
+        return [
+          it.kind === "book" ? "book" : "toy",
+          it.th || "", it.en || "", it.code || "", it.cat || "", it.author || "",
+          it.ageLo != null ? it.ageLo : "", it.ageHi != null ? it.ageHi : "",
+          it.edition || "", it.callNumber || "", it.cutterNumber || "",
+          it.status || "ok", it.loans || 0,
+          info.total, info.avail, (it.copies || []).map(c => c.barcode).filter(Boolean).join(", "),
+        ];
+      });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rowData]);
       ws["!cols"] = [
         { wch: 8 }, { wch: 30 }, { wch: 25 }, { wch: 14 }, { wch: 16 }, { wch: 20 },
         { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 },
+        { wch: 10 }, { wch: 8 }, { wch: 24 },
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "ทรัพยากร");
@@ -332,7 +354,7 @@ function AdminManage({ openItem }) {
   };
 
   const rows = items.filter((it) => (filter === "all" || it.kind === filter) &&
-    (!q.trim() || (it.th + it.en + it.code + (it.author || "") + (it.barcode || "")).toLowerCase().includes(q.trim().toLowerCase())));
+    (!q.trim() || (it.th + it.en + it.code + (it.author || "") + (it.copies || []).map(c => c.barcode || "").join(" ")).toLowerCase().includes(q.trim().toLowerCase())));
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((pg - 1) * PAGE_SIZE, pg * PAGE_SIZE);
@@ -360,11 +382,12 @@ function AdminManage({ openItem }) {
       <div className="card" style={{ overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead><tr style={{ background: "var(--bg-2)", textAlign: "left" }}>
-            {["รายการ", "รหัส / ISBN", "ประเภท", "หมวด / อายุ", "ยืมแล้ว", "สถานะ", ""].map((h) => <th key={h} style={{ padding: "12px 16px", fontWeight: 500, color: "var(--ink-2)", fontSize: 12.5 }}>{h}</th>)}
+            {["รายการ", "รหัส / ISBN", "ประเภท", "หมวด / อายุ", "ยืมแล้ว", "เล่ม", "สถานะ", ""].map((h) => <th key={h} style={{ padding: "12px 16px", fontWeight: 500, color: "var(--ink-2)", fontSize: 12.5 }}>{h}</th>)}
           </tr></thead>
           <tbody>
             {pageRows.map((it) => {
               const cat = Da.catLabel(it);
+              const info = Da.availInfo(it);
               return (
                 <tr key={it.id} className="histrow" style={{ borderTop: "1px solid var(--line)" }}>
                   <td style={{ padding: "11px 16px" }}><div className="row" style={{ gap: 11 }}>
@@ -375,7 +398,8 @@ function AdminManage({ openItem }) {
                   <td style={{ padding: "11px 16px" }}><span className="tag" style={{ fontSize: 11.5 }}>{it.kind === "toy" ? "ของเล่น" : "หนังสือ"}</span></td>
                   <td style={{ padding: "11px 16px", color: "var(--ink-2)" }}>{cat.th}{it.kind === "toy" && <div className="muted" style={{ fontSize: 12 }}>{Da.ageText(it)}</div>}</td>
                   <td style={{ padding: "11px 16px", color: "var(--ink-2)" }}>{it.loans}</td>
-                  <td style={{ padding: "11px 16px" }}><StatusPill status={it.status} /></td>
+                  <td style={{ padding: "11px 16px", color: "var(--ink-2)" }}><span style={{ fontWeight: 500, color: "var(--ink)" }}>{info.avail}</span> / {info.total}</td>
+                  <td style={{ padding: "11px 16px" }}><StatusPill status={it.status} count={info} /></td>
                   <td style={{ padding: "11px 16px", textAlign: "right" }}>
                     <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
                       {delConfirm === it.id ? (
@@ -444,12 +468,22 @@ function EditModal({ item, onSave, onClose }) {
     publishYear: item?.publishYear || "",
     callNumber: item?.callNumber || "",
     cutterNumber: item?.cutterNumber || "",
-    barcode: item?.barcode || "",
-    status: item?.status || "ok",
     image: item?.image || "",
   });
   const [err, setErr] = React.useState("");
   const fileRef = React.useRef();
+
+  // ฉบับ/เล่มจริง (copies) — แต่ละเล่มมี barcode + สถานะของตัวเอง
+  const copyWord = form.kind === "toy" ? "ชิ้น" : "เล่ม";
+  const [copies, setCopies] = React.useState(() =>
+    (item?.copies && item.copies.length)
+      ? item.copies.map((c) => ({ ...c }))
+      : [{ id: "cp" + Date.now() + "-1", barcode: "", label: (item?.kind === "toy" ? "ชิ้น" : "เล่ม") + "ที่ 1", status: "ok", due: null, loans: 0 }]
+  );
+  const origCopyIds = React.useRef((item?.copies || []).map((c) => c.id));
+  const addCopy = () => setCopies((cs) => [...cs, { id: "cp" + Date.now() + Math.random().toString(36).slice(2), barcode: "", label: `${copyWord}ที่ ${cs.length + 1}`, status: "ok", due: null, loans: 0 }]);
+  const updateCopy = (i, k, v) => { setCopies((cs) => cs.map((c, idx) => idx === i ? { ...c, [k]: v } : c)); setErr(""); };
+  const removeCopy = (i) => setCopies((cs) => cs.length > 1 ? cs.filter((_, idx) => idx !== i) : cs);
 
   const set = (k) => (e) => { setForm(p => ({ ...p, [k]: e.target.value })); setErr(""); };
   const setKind = (v) => setForm(p => ({ ...p, kind: v, cat: v === "book" ? Da.BOOK_CATS[0].id : Da.TOY_CATS[0].id }));
@@ -479,7 +513,10 @@ function EditModal({ item, onSave, onClose }) {
   const save = () => {
     if (!form.th.trim()) { setErr("กรุณากรอกชื่อรายการ (ไทย)"); return; }
     if (!form.code.trim()) { setErr("กรุณากรอกรหัส/ISBN"); return; }
-    onSave({ ...(item || {}), ...form, ageLo: Number(form.ageLo), ageHi: Number(form.ageHi), pieces: form.pieces || null });
+    if (!copies.length) { setErr(`ต้องมีอย่างน้อย 1 ${copyWord}`); return; }
+    const cleanCopies = copies.map((c) => ({ ...c, due: c.status === "busy" ? c.due : null }));
+    const removedCopyIds = origCopyIds.current.filter((id) => !cleanCopies.some((c) => c.id === id));
+    onSave({ ...(item || {}), ...form, ageLo: Number(form.ageLo), ageHi: Number(form.ageHi), pieces: form.pieces || null, copies: cleanCopies, _removedCopyIds: removedCopyIds });
   };
 
   return ReactDOM.createPortal(
@@ -524,11 +561,24 @@ function EditModal({ item, onSave, onClose }) {
               <div style={{ flex: 1 }}><span className="label">เลขหมู่</span><input className="field" value={form.callNumber} onChange={set("callNumber")} placeholder="เช่น 895.913" /></div>
               <div style={{ flex: 1 }}><span className="label">เลขผู้แต่ง</span><input className="field" value={form.cutterNumber} onChange={set("cutterNumber")} placeholder="เช่น ส732ห" /></div>
             </div>}
-            {form.kind === "book" && <div><span className="label">Barcode ห้องสมุด</span><input className="field" value={form.barcode} onChange={set("barcode")} placeholder="สแกนหรือพิมพ์ barcode" /></div>}
-            <div><span className="label">สถานะ</span>
-              <select className="field" value={form.status} onChange={set("status")}>
-                {Object.entries(STATUS_MAP).filter(([k]) => k !== "reserved").map(([k, v]) => <option key={k} value={k}>{v.th}</option>)}
-              </select>
+            <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                <span className="label" style={{ margin: 0 }}>ฉบับ/เล่มในห้องสมุด ({copies.length})</span>
+                <button className="btn btn-ghost btn-sm" onClick={addCopy}><Icon name="plus" size={14} /> เพิ่ม{copyWord}</button>
+              </div>
+              <div className="stack" style={{ gap: 8, marginTop: 9 }}>
+                {copies.map((c, i) => (
+                  <div key={c.id} className="row" style={{ gap: 8, alignItems: "center", padding: 9, border: "1px solid var(--line)", borderRadius: 10, background: "var(--bg)" }}>
+                    <input className="field" style={{ width: 96, flex: "none" }} value={c.label} onChange={(e) => updateCopy(i, "label", e.target.value)} placeholder={`${copyWord}ที่ ${i + 1}`} />
+                    <input className="field" style={{ flex: 1, minWidth: 0 }} value={c.barcode} onChange={(e) => updateCopy(i, "barcode", e.target.value)} placeholder="สแกน/พิมพ์ barcode" />
+                    <select className="field" style={{ width: 132, flex: "none" }} value={c.status} onChange={(e) => updateCopy(i, "status", e.target.value)}>
+                      {Object.entries(STATUS_MAP).filter(([k]) => k !== "reserved").map(([k, v]) => <option key={k} value={k}>{v.th}</option>)}
+                    </select>
+                    <button onClick={() => removeCopy(i)} disabled={copies.length <= 1} style={{ ...iconBtnStyle, opacity: copies.length <= 1 ? 0.3 : 1, cursor: copies.length <= 1 ? "default" : "pointer" }} title="ลบเล่มนี้"><Icon name="x" size={15} /></button>
+                  </div>
+                ))}
+              </div>
+              <p className="muted" style={{ fontSize: 12, marginTop: 7 }}>แต่ละ{copyWord}มี barcode และสถานะของตัวเอง · ISBN/รหัสด้านบนใช้ร่วมกันทั้งชื่อเรื่อง</p>
             </div>
             {err && <div className="row" style={{ gap: 8, padding: "10px 13px", background: "var(--over-soft)", borderRadius: 10, color: "var(--over)", fontSize: 13.5 }}><Icon name="flag" size={16} /> {err}</div>}
           </div>

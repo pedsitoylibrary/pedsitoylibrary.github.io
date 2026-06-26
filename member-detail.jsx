@@ -11,15 +11,18 @@ function ItemDetail({ item, onClose }) {
   if (!item) return null;
   const cat = Dd.catLabel(item);
   const age = Dd.ageText(item);
+  const info = Dd.availInfo(item);
   const avail = item.status === "ok";
   const inlib = item.status === "inlib";
   const isToy = item.kind === "toy";
-
+  const copyWord = isToy ? "ชิ้น" : "เล่ม";
 
   const meta = isToy
-    ? [["รหัสของเล่น", item.code], ["ด้านพัฒนาการ", cat.th], ["ช่วงอายุ", age], ["จำนวนชิ้น/ชุด", item.pieces || "1 ชุด"]]
+    ? [["รหัสของเล่น", item.code], ["ด้านพัฒนาการ", cat.th], ["ช่วงอายุ", age], ["จำนวนชิ้น/ชุด", item.pieces || "1 ชุด"],
+       [`จำนวนในห้อง`, `${info.total} ${copyWord}`], ["ว่างขณะนี้", `${info.avail} ${copyWord}`]]
     : [["ISBN", item.code], ["ผู้แต่ง", item.author || "–"], ["หมวดหมู่", cat.th], ["ภาษา", item.cat === "foreign" ? "อังกฤษ/สองภาษา" : "ไทย"],
-       ["ปีที่พิมพ์", item.publishYear || "–"], ["ครั้งที่พิมพ์", item.edition || "–"]];
+       ["ปีที่พิมพ์", item.publishYear || "–"], ["ครั้งที่พิมพ์", item.edition || "–"],
+       ["จำนวนในห้อง", `${info.total} เล่ม`], ["ว่างขณะนี้", `${info.avail} เล่ม`]];
 
   return (
     <div className="overlay" onClick={onClose} style={overlayStyle}>
@@ -43,7 +46,7 @@ function ItemDetail({ item, onClose }) {
               </div>
               <div className="card" style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 3 }}>
                 <span className="muted" style={{ fontSize: 11.5 }}>สถานะตอนนี้</span>
-                <StatusPill status={item.status} />
+                <StatusPill status={item.status} count={info} />
               </div>
             </div>
           </div>
@@ -63,7 +66,7 @@ function ItemDetail({ item, onClose }) {
             </div>
             {avail ? (
               <div className="row" style={{ gap: 10, padding: "11px 14px", background: "var(--brand-soft)", borderRadius: 12, color: "var(--brand-ink)", fontSize: 13.5 }}>
-                <Icon name="check" size={18} /> รายการนี้พร้อมให้ยืม — ติดต่อบรรณารักษ์ที่เคาน์เตอร์เพื่อดำเนินการยืม
+                <Icon name="check" size={18} /> พร้อมให้ยืม{info.total > 1 ? ` ${info.avail} จาก ${info.total} ${copyWord}` : ""} — ติดต่อบรรณารักษ์ที่เคาน์เตอร์เพื่อดำเนินการยืม
               </div>
             ) : inlib ? (
               <div className="row" style={{ gap: 10, padding: "11px 14px", background: "var(--bg-2)", borderRadius: 12, color: "var(--ink-2)", fontSize: 13.5 }}>

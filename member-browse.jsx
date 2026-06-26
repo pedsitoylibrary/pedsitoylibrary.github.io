@@ -35,7 +35,7 @@ function MemberBrowse({ openItem, seed, clearSeed }) {
         if (band && !(it.ageLo < band.hi && it.ageHi > band.lo)) return false;
       } else if (age !== "all" && it.kind === "book") return false;
       if (q.trim()) {
-        const s = (it.th + it.en + (it.author || "") + it.code + (it.barcode || "")).toLowerCase();
+        const s = (it.th + it.en + (it.author || "") + it.code + (it.copies || []).map((c) => c.barcode || "").join(" ")).toLowerCase();
         if (!s.includes(q.trim().toLowerCase())) return false;
       }
       return true;
