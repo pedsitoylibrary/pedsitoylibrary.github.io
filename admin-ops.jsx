@@ -286,9 +286,16 @@ function AdminOps() {
 
 function ItemPicker({ onPick, onClose }) {
   const [q, setQ] = React.useState("");
-  // แสดงเป็นรายเล่มที่ว่าง — สแกน barcode ของเล่มนั้นได้โดยตรง
+  // ของเล่น: แสดง 1 แถวต่อรายการ · หนังสือ: แสดงรายเล่มที่ว่าง
   const all = [];
-  Do.items.forEach((it) => (it.copies || []).forEach((c) => { if (c.status === "ok") all.push({ copy: c, item: it }); }));
+  Do.items.forEach((it) => {
+    if (it.kind === "toy") {
+      const avail = (it.copies || []).find((c) => c.status === "ok");
+      if (avail) all.push({ copy: avail, item: it });
+    } else {
+      (it.copies || []).forEach((c) => { if (c.status === "ok") all.push({ copy: c, item: it }); });
+    }
+  });
   const term = q.trim().toLowerCase();
   const rows = all.filter(({ copy, item }) => !term || (item.th + item.code + (copy.barcode || "") + (copy.label || "")).toLowerCase().includes(term)).slice(0, 40);
   const pickFirst = () => { if (rows.length) onPick(rows[0]); };

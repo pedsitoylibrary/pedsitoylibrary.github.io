@@ -561,25 +561,38 @@ function EditModal({ item, onSave, onClose }) {
               <div style={{ flex: 1 }}><span className="label">เลขหมู่</span><input className="field" value={form.callNumber} onChange={set("callNumber")} placeholder="เช่น 895.913" /></div>
               <div style={{ flex: 1 }}><span className="label">เลขผู้แต่ง</span><input className="field" value={form.cutterNumber} onChange={set("cutterNumber")} placeholder="เช่น ส732ห" /></div>
             </div>}
-            <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
-              <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                <span className="label" style={{ margin: 0 }}>ฉบับ/เล่มในห้องสมุด ({copies.length})</span>
-                <button className="btn btn-ghost btn-sm" onClick={addCopy}><Icon name="plus" size={14} /> เพิ่ม{copyWord}</button>
-              </div>
-              <div className="stack" style={{ gap: 8, marginTop: 9 }}>
-                {copies.map((c, i) => (
-                  <div key={c.id} className="row" style={{ gap: 8, alignItems: "center", padding: 9, border: "1px solid var(--line)", borderRadius: 10, background: "var(--bg)" }}>
-                    <input className="field" style={{ width: 96, flex: "none" }} value={c.label} onChange={(e) => updateCopy(i, "label", e.target.value)} placeholder={`${copyWord}ที่ ${i + 1}`} />
-                    <input className="field" style={{ flex: 1, minWidth: 0 }} value={c.barcode} onChange={(e) => updateCopy(i, "barcode", e.target.value)} placeholder="สแกน/พิมพ์ barcode" />
-                    <select className="field" style={{ width: 132, flex: "none" }} value={c.status} onChange={(e) => updateCopy(i, "status", e.target.value)}>
+            {form.kind === "toy" ? (
+              <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+                <div className="row" style={{ gap: 12 }}>
+                  <div style={{ flex: 1 }}><span className="label">Barcode</span><input className="field" value={copies[0]?.barcode || ""} onChange={(e) => updateCopy(0, "barcode", e.target.value)} placeholder="สแกน/พิมพ์ barcode" /></div>
+                  <div style={{ flex: 1 }}><span className="label">สถานะ</span>
+                    <select className="field" value={copies[0]?.status || "ok"} onChange={(e) => updateCopy(0, "status", e.target.value)}>
                       {Object.entries(STATUS_MAP).filter(([k]) => k !== "reserved").map(([k, v]) => <option key={k} value={k}>{v.th}</option>)}
                     </select>
-                    <button onClick={() => removeCopy(i)} disabled={copies.length <= 1} style={{ ...iconBtnStyle, opacity: copies.length <= 1 ? 0.3 : 1, cursor: copies.length <= 1 ? "default" : "pointer" }} title="ลบเล่มนี้"><Icon name="x" size={15} /></button>
                   </div>
-                ))}
+                </div>
               </div>
-              <p className="muted" style={{ fontSize: 12, marginTop: 7 }}>แต่ละ{copyWord}มี barcode และสถานะของตัวเอง · ISBN/รหัสด้านบนใช้ร่วมกันทั้งชื่อเรื่อง</p>
-            </div>
+            ) : (
+              <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="label" style={{ margin: 0 }}>เล่มในห้องสมุด ({copies.length})</span>
+                  <button className="btn btn-ghost btn-sm" onClick={addCopy}><Icon name="plus" size={14} /> เพิ่มเล่ม</button>
+                </div>
+                <div className="stack" style={{ gap: 8, marginTop: 9 }}>
+                  {copies.map((c, i) => (
+                    <div key={c.id} className="row" style={{ gap: 8, alignItems: "center", padding: 9, border: "1px solid var(--line)", borderRadius: 10, background: "var(--bg)" }}>
+                      <input className="field" style={{ width: 96, flex: "none" }} value={c.label} onChange={(e) => updateCopy(i, "label", e.target.value)} placeholder={`เล่มที่ ${i + 1}`} />
+                      <input className="field" style={{ flex: 1, minWidth: 0 }} value={c.barcode} onChange={(e) => updateCopy(i, "barcode", e.target.value)} placeholder="สแกน/พิมพ์ barcode" />
+                      <select className="field" style={{ width: 132, flex: "none" }} value={c.status} onChange={(e) => updateCopy(i, "status", e.target.value)}>
+                        {Object.entries(STATUS_MAP).filter(([k]) => k !== "reserved").map(([k, v]) => <option key={k} value={k}>{v.th}</option>)}
+                      </select>
+                      <button onClick={() => removeCopy(i)} disabled={copies.length <= 1} style={{ ...iconBtnStyle, opacity: copies.length <= 1 ? 0.3 : 1, cursor: copies.length <= 1 ? "default" : "pointer" }} title="ลบเล่มนี้"><Icon name="x" size={15} /></button>
+                    </div>
+                  ))}
+                </div>
+                <p className="muted" style={{ fontSize: 12, marginTop: 7 }}>แต่ละเล่มมี barcode และสถานะของตัวเอง · ISBN/รหัสด้านบนใช้ร่วมกันทั้งชื่อเรื่อง</p>
+              </div>
+            )}
             {err && <div className="row" style={{ gap: 8, padding: "10px 13px", background: "var(--over-soft)", borderRadius: 10, color: "var(--over)", fontSize: 13.5 }}><Icon name="flag" size={16} /> {err}</div>}
           </div>
         </div>
