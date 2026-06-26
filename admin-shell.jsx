@@ -398,7 +398,7 @@ function AdminManage({ openItem }) {
                   <td style={{ padding: "11px 16px" }}><span className="tag" style={{ fontSize: 11.5 }}>{it.kind === "toy" ? "ของเล่น" : "หนังสือ"}</span></td>
                   <td style={{ padding: "11px 16px", color: "var(--ink-2)" }}>{cat.th}{it.kind === "toy" && <div className="muted" style={{ fontSize: 12 }}>{Da.ageText(it)}</div>}</td>
                   <td style={{ padding: "11px 16px", color: "var(--ink-2)" }}>{it.loans}</td>
-                  <td style={{ padding: "11px 16px", color: "var(--ink-2)" }}><span style={{ fontWeight: 500, color: "var(--ink)" }}>{info.avail}</span> / {info.total}</td>
+                  <td style={{ padding: "11px 16px", color: "var(--ink-2)" }}>{it.kind === "book" ? <><span style={{ fontWeight: 500, color: "var(--ink)" }}>{info.avail}</span> / {info.total}</> : <span className="muted">–</span>}</td>
                   <td style={{ padding: "11px 16px" }}><StatusPill status={it.status} count={info} /></td>
                   <td style={{ padding: "11px 16px", textAlign: "right" }}>
                     <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
