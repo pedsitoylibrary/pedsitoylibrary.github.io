@@ -119,6 +119,25 @@ function AdminOps() {
     setDone(true);
   };
 
+  const handleRenew = (loan, e) => {
+    e.stopPropagation();
+    if ((loan.renewals || 0) >= Do.rules.renewals) {
+      alert(`ยืมต่อได้สูงสุด ${Do.rules.renewals} ครั้งแล้ว — ต้องนำคืนก่อน`); return;
+    }
+    const newDue = of.addDays(loan.due, Do.rules.days);
+    loan.due = newDue;
+    loan.renewals = (loan.renewals || 0) + 1;
+    const ci = Do.copyById(loan.copyId, loan.itemId);
+    if (ci) { ci.copy.due = newDue; Do.recompute(ci.item); }
+    const days = Math.round((new Date(newDue).getTime() - new Date(Do.today).getTime()) / 86400000);
+    loan.status = days < 0 ? "overdue" : days <= 2 ? "due-soon" : "active";
+    if (window.DB) Promise.all([
+      window.DB.renewLoan(loan.id, newDue),
+      ci ? window.DB.updateCopy(ci.copy.id, { due: newDue }) : Promise.resolve(),
+    ]).catch(console.error);
+    tick();
+  };
+
   const scanMember = (code) => {
     const found = Do.members.find(m => m.code.toLowerCase() === code.trim().toLowerCase() || m.id === code.trim());
     if (found) setMember(found);
@@ -248,7 +267,7 @@ function AdminOps() {
                       const left = of.daysBetween(Do.today, l.due); const over = left < 0;
                       const sel = cart.some((x) => x.id === l.id);
                       return (
-                        <button key={l.id} onClick={() => setCart(sel ? cart.filter((x) => x.id !== l.id) : [...cart, l])} style={{
+                        <div key={l.id} onClick={() => setCart(sel ? cart.filter((x) => x.id !== l.id) : [...cart, l])} style={{
                           display: "flex", alignItems: "center", gap: 13, padding: 11, borderRadius: 12, cursor: "pointer", textAlign: "left",
                           border: sel ? "2px solid var(--brand)" : "1px solid var(--line)", background: sel ? "var(--brand-soft)" : "var(--surface)",
                         }}>
@@ -262,8 +281,13 @@ function AdminOps() {
                               {l.bag && <span className="tag" style={{ fontSize: 11 }}><Icon name="box" size={12} /> ถุงผ้า {l.bag}</span>}
                             </span>
                           </div>
-                          {over ? <span className="pill over">เกิน {Math.abs(left)} วัน · {Math.abs(left) * Do.rules.finePerDay} บ.</span> : <span className="pill ok">ตรงเวลา</span>}
-                        </button>
+                          <div className="stack" style={{ alignItems: "flex-end", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                            {over ? <span className="pill over">เกิน {Math.abs(left)} วัน · {Math.abs(left) * Do.rules.finePerDay} บ.</span> : <span className="pill ok">ตรงเวลา</span>}
+                            {!sel && <button className="btn btn-ghost btn-sm" onClick={(e) => handleRenew(l, e)} disabled={(l.renewals || 0) >= Do.rules.renewals} style={{ fontSize: 12 }} title={`ต่ออายุอีก ${Do.rules.days} วัน`}>
+                              <Icon name="refresh" size={12} /> ยืมต่อ{l.renewals > 0 ? ` (${l.renewals}/${Do.rules.renewals})` : ""}
+                            </button>}
+                          </div>
+                        </div>
                       );
                     })}
                 </div>

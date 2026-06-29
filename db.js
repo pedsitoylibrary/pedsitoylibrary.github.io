@@ -80,7 +80,7 @@
     return {
       id: r.id, member: r.member_id, itemId: r.item_id, copyId: r.copy_id || null,
       borrowed: r.borrowed_at, due: r.due_at, status: r.status,
-      bag: r.bag || null,
+      bag: r.bag || null, renewals: r.renewals || 0,
     };
   }
   function loanToRow(l) {
@@ -88,7 +88,7 @@
       id: l.id, member_id: l.member, item_id: l.itemId, copy_id: l.copyId || null,
       borrowed_at: l.borrowed, due_at: l.due,
       returned_at: null, status: l.status || "active",
-      bag: l.bag || null,
+      bag: l.bag || null, renewals: l.renewals || 0,
     };
   }
 
@@ -255,6 +255,13 @@
         .update({ returned_at: returnedAt, status: "returned" })
         .eq("id", loanId);
       if (error) console.error("[DB] returnLoan:", error);
+    },
+
+    async renewLoan(loanId, newDue) {
+      const { error } = await client.from("loans")
+        .update({ due_at: newDue })
+        .eq("id", loanId);
+      if (error) console.error("[DB] renewLoan:", error);
     },
 
     /* ---- monthly stats ---- */

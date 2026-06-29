@@ -143,6 +143,27 @@ function AdminHead({ title, sub, children }) {
 /*  DASHBOARD                                                  */
 /* ========================================================== */
 function AdminDash({ setPage, openItem, adminUser }) {
+  const [, tick] = React.useReducer(n => n + 1, 0);
+
+  const handleRenew = (loan, e) => {
+    e.stopPropagation();
+    if ((loan.renewals || 0) >= Da.rules.renewals) {
+      alert(`ยืมต่อได้สูงสุด ${Da.rules.renewals} ครั้งแล้ว — ต้องนำคืนก่อน`); return;
+    }
+    const newDue = af.addDays(loan.due, Da.rules.days);
+    loan.due = newDue;
+    loan.renewals = (loan.renewals || 0) + 1;
+    const ci = Da.copyById(loan.copyId, loan.itemId);
+    if (ci) { ci.copy.due = newDue; Da.recompute(ci.item); }
+    const days = Math.round((new Date(newDue).getTime() - new Date(Da.today).getTime()) / 86400000);
+    loan.status = days < 0 ? "overdue" : days <= 2 ? "due-soon" : "active";
+    if (window.DB) Promise.all([
+      window.DB.renewLoan(loan.id, newDue),
+      ci ? window.DB.updateCopy(ci.copy.id, { due: newDue }) : Promise.resolve(),
+    ]).catch(console.error);
+    tick();
+  };
+
   const overdue = Da.loans.filter((l) => l.status === "overdue");
   const dueSoon = Da.loans.filter((l) => l.status === "due-soon");
   const available = Da.items.filter((i) => i.status === "ok").length;
@@ -186,7 +207,9 @@ function AdminDash({ setPage, openItem, adminUser }) {
                     <span className="muted" style={{ fontSize: 12.5 }}>{m.name} · {m.phone}</span>
                   </div>
                   {over ? <span className="pill over">เกิน {Math.abs(left)} วัน</span> : <span className="pill warn">เหลือ {left} วัน</span>}
-                  <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); }}><Icon name="bell" size={14} /> เตือน</button>
+                  <button className="btn btn-ghost btn-sm" onClick={(e) => handleRenew(l, e)} disabled={(l.renewals || 0) >= Da.rules.renewals} title={(l.renewals || 0) >= Da.rules.renewals ? "ยืมต่อครบจำนวนแล้ว" : `ต่ออายุอีก ${Da.rules.days} วัน`}>
+                    <Icon name="refresh" size={14} /> ยืมต่อ{l.renewals > 0 ? ` (${l.renewals}/${Da.rules.renewals})` : ""}
+                  </button>
                 </div>
               );
             })}
